@@ -1,6 +1,7 @@
 # UART Communication – Docs
 
-Questa cartella raccoglie spiegazioni, note e guida passo-passo del progetto.
+In questi file è possibile trovare 
+spiegazioni, note e guida passo-passo del progetto.
 
 - [Goals & Scope](goals_and_scope.md)
 - [Architecture & Wiring](architecture.md)
