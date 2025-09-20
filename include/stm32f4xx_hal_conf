@@ -1,0 +1,44 @@
+#ifndef STM32F4XX_HAL_CONF_H
+#define STM32F4XX_HAL_CONF_H
+
+#include "stm32f4xx_hal_def.h" // prende tipi, macro e definizioni comuni a tutta la HAl (status, assert)
+
+/* Attivazione dei moduli HAL */
+#define HAL_MODULE_ENABLED
+#define HAL_RCC_MODULE_ENABLED // gestione clock e periferiche
+#define HAL_GPIO_MODULE_ENABLED //pin, modalità alternate 
+#define HAL_CORTEX_MODULE_ENABLED // abilita, tra tante cose, il tick di sistema
+#define HAL_UART_MODULE_ENABLED // abilita la seriale che sto usando 
+
+/* Valori oscillatori (default) */
+#define HSE_VALUE    ((uint32_t)8000000U) // high speed external oscillator (8 MHz)
+#define HSI_VALUE    ((uint32_t)16000000U) // high speed internal oscillator (16 MHz)
+#define LSE_VALUE    ((uint32_t)32768U) // low speed external, serve quasi sempre per l'rtc (real time clock) perchè ha un basso consumo e precisione sul lungo periodo 
+#define LSI_VALUE    ((uint32_t)32000U) // low speed internal 
+
+/* Sistema */
+#define  VDD_VALUE                 ((uint32_t)3300U)
+#define  TICK_INT_PRIORITY         ((uint32_t)0U) // indica la priorità dell'interrupt di systick, (systick è il timer interno che genera un interrupt periodico), quindi impostandolo a zero significa che systick ha la massima priorità
+#define  USE_RTOS                  0U // spiegato sotto 
+#define  PREFETCH_ENABLE           1U // abilita il prefetch buffer della flash -> in pratica la cpu può "leggere in anticipo" le istruzioni della flash, riducendo i tempi di attesa
+#define  INSTRUCTION_CACHE_ENABLE  1U
+#define  DATA_CACHE_ENABLE         1U
+
+/* Include degli header dei moduli */
+#ifdef HAL_RCC_MODULE_ENABLED
+  #include "stm32f4xx_ll_rcc.h"
+#endif
+#ifdef HAL_GPIO_MODULE_ENABLED
+  #include "stm32f4xx_hal_gpio.h"
+#endif
+#ifdef HAL_CORTEX_MODULE_ENABLED
+  #include "stm32f4xx_hal_cortex.h"
+#endif
+#ifdef HAL_UART_MODULE_ENABLED
+  #include "stm32f4xx_hal_uart.h"
+#endif
+
+#endif /* STM32F4XX_HAL_CONF_H */
+
+
+//Systick è un timer interno a 24 bit che genera un interrupt a intervalli irregolari, la Hal lo confgura a di default a 1ms, in modo da avere un tick di sistema ogni ms. Senza RTOS il Systick è gestito slo dalla HAL. con RTOS = 1, invece, il Systick diventa il clock dell'RTOS (es.FREERTOS). L'RTS usa il tick per gestire task, fare context switch e gestire delay non bloccanti. Quindi se chiamo osDelay(1000; (anzichè HAL_Delay(1000)) la cpu non resta ferma -> il task corrente va in attesa, L?RTOS può eseguire altri task nel frattempo.
