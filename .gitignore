@@ -53,3 +53,34 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+
+# ===== Added for STM32 / Arduino / IDEs =====
+
+# STM32CubeIDE / Eclipse metadata
+.settings/
+.project
+.cproject
+*.launch
+
+# Build/output directories (non versionare)
+Debug/
+Release/
+build/
+**/.dep/
+**/Objects/
+**/subdir.mk
+
+# Binari/immagini aggiuntive
+*.bin
+
+# Arduino build artifacts
+*.ino.cpp
+*.eep
+
+# Editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
