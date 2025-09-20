@@ -1,4 +1,4 @@
-/*#include <Arduino.h>
+#include <Arduino.h>
 
 #define TEST_PC 1 // macro, la metto così se devo escludere il codice a seguire, nel caso in cui collega la stm32, mi basta impostare questo valore a 0
 
@@ -42,5 +42,6 @@ void loop(){
         else if(idx < sizeof(line)-1) // evito overflow 
             line[idx++] = c;
     }
-}*/
+}
+
 
