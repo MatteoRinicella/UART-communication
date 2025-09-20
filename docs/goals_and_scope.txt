@@ -10,6 +10,9 @@ Logging: STM32 -> USART2, Virtual com -> PC
 Risultati attesi:
 TX periodico da STM32, ACK su arduino
 Buffering a riga e parsing semplice 
+
+Nella pratica: STM32 invia messaggi ogni secondo, nonchè una parola ben definita. Arduino, quando riceve, risponde "ACK, per indicare che ha correttamente ricevuto il messaggio. 
+E possibile visualizzare lo scambio di messaggi tramite un semplcie serial monitor. E' consigliato l'utilizzo del software "putty" per una migliore visualizzazione.
  
 
 
