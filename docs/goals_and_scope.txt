@@ -1,20 +1,171 @@
-GOALS AND SCOPE 
-OBIETTIVO
-Realizzare una comunicazione UART affidabile tra STM32 F401RE e Arduino Mega 2560
+## Pagina 1
 
-Dettagli
-Baudrate: 115200 bps
-Link: STM32-> USART1 -> Serial1 -> Arduino
-Logging: STM32 -> USART2, Virtual com -> PC
+**COMUNICAZIONE UART**
 
-Risultati attesi:
-TX periodico da STM32, ACK su arduino
-Buffering a riga e parsing semplice 
+**OBIETTIVI:**
+- STM32 invia messaggi ogni 1s → “HELLO_A1\n”
+- Arduino quando riceve → risponde “ACK_B\n”
+- Vedere i messaggi sul Serial Monitor (di Arduino)
 
-Nella pratica: STM32 invia messaggi ogni secondo, nonchè una parola ben definita. Arduino, quando riceve, risponde "ACK, per indicare che ha correttamente ricevuto il messaggio. 
-E possibile visualizzare lo scambio di messaggi tramite un semplcie serial monitor. E' consigliato l'utilizzo del software "putty" per una migliore visualizzazione.
- 
+**CODICE → ARDUINO**  → *non serve con Arduino Mega → ha porte hardware*
 
+- Utilizzo di **SoftwareSerial** → libera chi prima teneva un UART “impegnata” via software attraverso pin digitali qualsiasi → così posso aggiungere una porta seriale oltre quella hardware  
+  Limiti: più fragile vs hw; timing; **meglio** usare hardware.  
+  “Se faccio così e c’è rumore posso perdere byte”
 
+- Utilizzerò la macro **F()** nei `println`, perché? Le stringhe letterali vengono copiate per default in **RAM** → risorsa preziosa.  
+  Quindi questa macro serve a lasciarle in **FLASH**.
 
+**CODICE → STM32**
 
+- **Ambiente/servizio**: serve/espone un device USB. Il **ST-LINK** è anche un convertitore USB↔Seriale (un “USB-to-UART bridge”).  
+  Sulla Nucleo c’è un chip che espone al PC una porta seriale virtuale e la collega internamente alla UART.
+
+- Quale usare? → **PA2 = USART2_TX (MCU→PC)**; **PA3 = USART2_RX (PC→MCU)**  
+  USART1 (link con Arduino): **PA9 = TX**, **PA10 = RX**.
+
+- **Side** interfaccia: PC ↔ STM32 ↔ Arduino
+
+- **Flusso**:  
+  → STM32 invia stringa di testo (“HELLO_A1\n”).  
+  → Arduino quando riceve risponde “ACK_B\n”.
+
+- Utilizzo una **macro per abilitare i LOG** → utilizzo del preprocessore
+
+- **Sorgenti**: `.c / .cpp`  
+  La pre-processore `#define` ecc. #include (sorgenti “espansi”)  
+  → compilatore (.o)  
+  → linker (firmware) `.elf / .hex`  
+  → lo flash (MCU)
+
+---
+
+## Pagina 2
+
+**[CONTINUAZIONE CODICE] → STM32**
+
+**Scelgo due UART per la comunicazione:**
+
+- **USART2** (debug verso PC) → **PA2 = TX**, **PA3 = RX**  
+- **USART1** (link verso Mega) → **PA9 = TX**, **PA10 = RX** → **RICORDARSI di mettere un partitore!**
+
+> Ho separato questo per tenere separati **debug** e **link** applicativo.
+
+- Per loggare verso il PC uso `HAL_UART_Transmit` e la incappotto in una **wrapper `pc_log`**
+
+- Questa funzione è **bloccante**, cioè vuol dire che non ritorna finché:  
+  1) l’ultimo byte non è uscito dal **pin TX**,  
+  2) oppure non scatta il **timeout**.
+
+**Come è composta?**
+- 1° parametro: `UART_HandleTypeDef* huart` → quindi, su quale UART voglio usare.  
+  Nel mio caso scriverò **2** perché è la porta che va al PC (USART2).  
+- 2° parametro: `uint8_t*`/`uint8_t[]` → buffer/array.  
+- 3° parametro: `uint16_t`/`size_t` → **len** (numero di byte).  
+- 4° parametro: **timeout** in **ms** (unsigned).  
+  Un puntatore a `uint8_t` è un byte (così contiguo).  
+  Io però non uso una stringa `char`/`const char*`? → **Sì**, ma è **notazione**: posso inviare `uint8_t*` perché non devo leggere, è allo stesso modo per trattare un cast/puntatore.  
+  → `const` = sola lettura. Alla **HAL** basta per l’uso in trasmissione.
+
+- **`pc_log()`** → `huart`, `size`, `str` → quindi su **USART2** un solo servizio (il debug). Tipicamente stringhe di log (stdio) → faccio un `write()`.
+
+**Cosa potrò utilizzare per migliorare i LOG?**
+- `HAL_UART_Receive_IT` (interrupt) o `HAL_UART_Transmit_IT` / DMA
+
+**DEBUG**
+
+**Cosa funziona?**
+- `pc_log()` controlli principali:
+  - Verifica parametri (NULL, p/es. size)
+  - Controlla che la **UART** sia **READY**; poi se sta trasmettendo (`huart->gState` in corso) o occupata → può tornare HAL_BUSY.
+
+---
+
+## Pagina 3
+
+*(Partitore resistivo per livelli logici 5V→3.3V)*
+
+Scelgo **Rb: 10 kΩ** e **Ra: 5 kΩ** → Valuto:  
+- Vout = **5 · 10 / (5 + 10)** → Vout = **5 · 2/3** → **≈ 3.31 V**
+
+**Comunicazione OK** ✅
+
+**FUNZIONAMENTO:**
+
+**1° messaggio**: “Ciao Cici” *(esempio)*  
+STM32 → USART1 → Arduino  
+In parallelo logga: “STM32 → Arduino: Ciao Cici”
+
+**Arduino** accumula i byte fino a **\n**, chiude la stringa → riceve “Ciao Cici” e logga su COM9 *(esempio porta)* “RX: Ciao Cici”
+
+**Per rispondere con ACK_B**  
+Se `strcmp(line, "ACK_B") != 0` {  
+`Serial1.print("ACK_B\n");`   «**verso STM32**»  
+`Serial.print("TX: ACK_B\n");` «**log su COM9**»  
+}
+
+STM32 **riceve** l’**ACK** da Mega  
+**Polling non bloccante**: `if (HAL_UART_Receive(huart, &c, 1, 0) == HAL_OK)`  
+Successivamente, quando trova `\n`, **chiude la riga** e la passa a `process_line()` (“ACK_B”).  
+Poi chiama la funzione **process_line** (FSM) con (“ACK_B”).  
+E logga su COM10 → “Arduino → STM32: ACK_B”.
+
+---
+
+## Pagina 4
+
+**2°) LOCK + STATO**
+- Metto un **lock** su `handle` (`__HAL_LOCK`) per evitare accesso concorrente.  
+- Imposto lo **stato TX**: `huart->gState = HAL_UART_STATE_BUSY_TX`.
+
+**3°) Setup del TIMEOUT**
+- Salvo **tickStart** = `HAL_GetTick()`; lo userò per verificare **se il tempo trascorso supera timeout**.
+
+**4°) LOOP invio di byte** (polling) per ogni byte da inviare:
+- Attendo che il flag **TXE** (transmit data register empty) sia **SET**.  
+  `TXE = 1` significa che il registro dati è **vuoto** → posso scrivere un **nuovo byte**.  
+- Se il flag non arriva in tempo → **HAL_TIMEOUT**.
+
+**5°) Fine trasmissione**
+- Attendo il flag **TC** (trasmissione completa).  
+  Verifica che il **registro shift** sia vuoto (l’ultimo byte è uscito dal pin).  
+- Se non arriva in tempo → **HAL_TIMEOUT**.
+
+**6°) Sblocco + stato finale**
+- Rimetto lo stato a **READY** (`huart->gState = HAL_UART_STATE_READY`).  
+- Rilascio il **lock** (`__HAL_UNLOCK`).  
+- Ritorna `HAL_OK` (oppure `HAL_TIMEOUT`/`HAL_ERROR`/`HAL_BUSY`, a seconda dei casi).
+
+**Nella state-tracking, quando chiudo la stringa poi la processo**  
+Es. “LED ON”  
+- L’accumulo: prendo i byte uno a uno.  
+- La riga va processata e loggata.  
+- Chiamo `process_line("LED ON")` → sul successivo giro si prepara la riga successiva e si sotto-stato per prepararsi…
+
+**Fasi di test per STM32**
+- Imposto uno **switch** in modo da avere **due scenari**:
+  - STM32 → **PC** (tutto ok)
+  - STM32 → **Arduino** (uguale al caso reale)
+
+---
+
+## Pagina 5
+
+**A parte – per lo switch a parte**  
+Definisco la **struct** UART: `UART_HandleTypeDef *hLink = NULL`  
+Creo un puntatore a un **handle UART** della HAL chiamato “hLink” che rappresenta **UART di link (1)**:  
+è il canale con cui **parliamo con peer Mega/PC**.
+
+“**Handle UART della HAL**” = struttura `UART_HandleTypeDef` che rappresenta una **periferica UART** dentro la HAL (base address USARTx, stato, buffer, parametri…).  
+Si passa sempre **l’indirizzo** dell’handle alle API (quando scrivo su PC o Arduino).
+
+**Test OK!**
+
+**Fase finale → STM32 ↔ Arduino**
+
+- Arduino **TX1 (pin 18)** → STM32 **USART1_RX (PA10)**  
+  *→ 5V → partitore → 3.3V*
+
+Formula partitore:
+Vout = Vin * RB / (RA + RB)
+3.3 / 5 = RB / (RA + RB) ⇒ RB / (RA + RB) ≈ 0.66 ⇒ RA ≈ 0.515 · RB
